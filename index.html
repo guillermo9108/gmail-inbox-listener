@@ -24,11 +24,6 @@
   <h2>Flujo y errores</h2>
   <pre id="log"></pre>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Gmail API -->
-  <script src="https://apis.google.com/js/api.js"></script>
-
   <script>
     const CLIENT_ID = '673848947640-mt8unrh2sbdcncee7nt2rsa7of2ul9e7.apps.googleusercontent.com';
     const API_KEY = 'AIzaSyCMN2M55nYeAm2E-Qw4dOGByef4yOKN8t4';
@@ -141,13 +136,12 @@
       }
     }
 
-    // Inicialización
     window.onload = () => {
       document.getElementById('authorize_button').style.display = 'none';
       document.getElementById('signout_button').style.display = 'none';
     }
-    window.addEventListener('DOMContentLoaded', gapiLoaded);
-    window.addEventListener('DOMContentLoaded', gisLoaded);
   </script>
+  <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+  <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
 </body>
 </html>
