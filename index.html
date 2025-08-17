@@ -3,6 +3,9 @@
 <head>
   <title>Gmail Inbox Listener</title>
   <meta charset="UTF-8">
+  <style>
+    #log { background: #222; color: #eee; padding: 1em; height: 200px; overflow-y: auto; }
+  </style>
 </head>
 <body>
   <h1>Correos Recibidos</h1>
@@ -22,6 +25,9 @@
   <button id="authorize_button">Conectar con Gmail</button>
   <button id="signout_button" style="display:none;">Desconectar</button>
 
+  <h2>Flujo y errores</h2>
+  <pre id="log"></pre>
+
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
     const CLIENT_ID = '673848947640-mt8unrh2sbdcncee7nt2rsa7of2ul9e7.apps.googleusercontent.com';
@@ -29,25 +35,38 @@
     const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"];
     const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
 
+    // Función para loguear mensajes en la página
+    function log(msg) {
+      const logEl = document.getElementById('log');
+      logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
     function handleClientLoad() {
+      log('Cargando librería Google API...');
       gapi.load('client:auth2', initClient);
     }
 
     function initClient() {
+      log('Inicializando cliente Google API...');
       gapi.client.init({
         apiKey: API_KEY,
         clientId: CLIENT_ID,
         discoveryDocs: DISCOVERY_DOCS,
         scope: SCOPES
       }).then(function () {
+        log('Cliente inicializado correctamente.');
         gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
         updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
         document.getElementById('authorize_button').onclick = handleAuthClick;
         document.getElementById('signout_button').onclick = handleSignoutClick;
+      }, function(error) {
+        log('Error al inicializar el cliente: ' + JSON.stringify(error));
       });
     }
 
     function updateSigninStatus(isSignedIn) {
+      log('Estado de autenticación: ' + (isSignedIn ? 'Conectado' : 'Desconectado'));
       if (isSignedIn) {
         document.getElementById('authorize_button').style.display = 'none';
         document.getElementById('signout_button').style.display = '';
@@ -60,15 +79,26 @@
     }
 
     function handleAuthClick(event) {
-      gapi.auth2.getAuthInstance().signIn();
+      log('Intentando autenticar usuario...');
+      gapi.auth2.getAuthInstance().signIn().then(() => {
+        log('Usuario autenticado correctamente.');
+      }).catch(error => {
+        log('Error en autenticación: ' + JSON.stringify(error));
+      });
     }
 
     function handleSignoutClick(event) {
-      gapi.auth2.getAuthInstance().signOut();
-      document.querySelector('#emails tbody').innerHTML = '';
+      log('Cerrando sesión de usuario...');
+      gapi.auth2.getAuthInstance().signOut().then(() => {
+        log('Usuario desconectado.');
+        document.querySelector('#emails tbody').innerHTML = '';
+      }).catch(error => {
+        log('Error al desconectar usuario: ' + JSON.stringify(error));
+      });
     }
 
     function listMessages() {
+      log('Solicitando listado de correos...');
       gapi.client.gmail.users.messages.list({
         'userId': 'me',
         'maxResults': 10,
@@ -78,10 +108,12 @@
         const tbody = document.querySelector('#emails tbody');
         tbody.innerHTML = '';
         if (!messages || messages.length === 0) {
+          log('No hay correos en la bandeja de entrada.');
           tbody.innerHTML = '<tr><td colspan="3">No hay correos en la bandeja de entrada.</td></tr>';
           return;
         }
-        // Para cada mensaje, obtenemos los detalles
+        log(`Se encontraron ${messages.length} correos. Consultando detalles...`);
+        let count = 0;
         messages.forEach(function(message) {
           gapi.client.gmail.users.messages.get({
             'userId': 'me',
@@ -95,9 +127,15 @@
             let date = headers.find(h => h.name === 'Date')?.value || '';
             let row = `<tr><td>${from}</td><td>${subject}</td><td>${date}</td></tr>`;
             tbody.innerHTML += row;
+            count++;
+            log(`Correo ${count}: ${subject} (${from})`);
+          }, function(error) {
+            log('Error al obtener mensaje: ' + JSON.stringify(error));
+            tbody.innerHTML += `<tr><td colspan="3">Error al obtener mensaje.</td></tr>`;
           });
         });
       }, function(error) {
+        log('Error al listar mensajes: ' + JSON.stringify(error));
         const tbody = document.querySelector('#emails tbody');
         tbody.innerHTML = `<tr><td colspan="3">Error: ${error.result.error.message}</td></tr>`;
       });
