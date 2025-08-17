@@ -1,22 +1,70 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Gmail Inbox Listener</title>
-</head>
-<body>
-  <h1>Correos Recibidos</h1>
-  <table id="emails">
-    <thead>
-      <tr>
-        <th>De</th>
-        <th>Asunto</th>
-        <th>Fecha</th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- Los correos se mostrarán aquí -->
-    </tbody>
-  </table>
-  <p>Para ver tus correos, deberás conectar con la API de Gmail.</p>
-</body>
-</html>
+<script src="https://apis.google.com/js/api.js"></script>
+<script>
+  // Reemplaza con tu Client ID
+  const CLIENT_ID = 'premiomoviletecsa@gmail.com';
+  const API_KEY = 'bdnqtrpevxwuhlcx';
+
+  const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"];
+  const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
+
+  function handleClientLoad() {
+    gapi.load('client:auth2', initClient);
+  }
+
+  function initClient() {
+    gapi.client.init({
+      apiKey: API_KEY,
+      clientId: CLIENT_ID,
+      discoveryDocs: DISCOVERY_DOCS,
+      scope: SCOPES
+    }).then(function () {
+      // Listen for sign-in state changes.
+      gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
+      // Handle the initial sign-in state.
+      updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
+      document.getElementById('authorize_button').onclick = handleAuthClick;
+      document.getElementById('signout_button').onclick = handleSignoutClick;
+    });
+  }
+
+  function updateSigninStatus(isSignedIn) {
+    if (isSignedIn) {
+      listMessages();
+    }
+  }
+
+  function handleAuthClick(event) {
+    gapi.auth2.getAuthInstance().signIn();
+  }
+
+  function handleSignoutClick(event) {
+    gapi.auth2.getAuthInstance().signOut();
+  }
+
+  function listMessages() {
+    gapi.client.gmail.users.messages.list({
+      'userId': 'me',
+      'maxResults': 10
+    }).then(function(response) {
+      const messages = response.result.messages;
+      const tbody = document.querySelector('#emails tbody');
+      tbody.innerHTML = '';
+      if (!messages) return;
+      messages.forEach(function(message) {
+        gapi.client.gmail.users.messages.get({
+          'userId': 'me',
+          'id': message.id
+        }).then(function(msg) {
+          let headers = msg.result.payload.headers;
+          let from = headers.find(h => h.name === 'From')?.value || '';
+          let subject = headers.find(h => h.name === 'Subject')?.value || '';
+          let date = headers.find(h => h.name === 'Date')?.value || '';
+          let row = `<tr><td>${from}</td><td>${subject}</td><td>${date}</td></tr>`;
+          tbody.innerHTML += row;
+        });
+      });
+    });
+  }
+</script>
+<button id="authorize_button">Conectar con Gmail</button>
+<button id="signout_button">Desconectar</button>
