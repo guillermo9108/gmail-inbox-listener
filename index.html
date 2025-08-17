@@ -23,131 +23,16 @@
   <button id="signout_button" style="display:none;">Desconectar</button>
   <h2>Flujo y errores</h2>
   <pre id="log"></pre>
-
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Gmail API -->
-  <script src="https://apis.google.com/js/api.js"></script>
-
   <script>
-    const CLIENT_ID = '673848947640-mt8unrh2sbdcncee7nt2rsa7of2ul9e7.apps.googleusercontent.com';
-    const API_KEY = 'AIzaSyCMN2M55nYeAm2E-Qw4dOGByef4yOKN8t4';
-    const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"];
-    const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
-
-    let tokenClient;
-    let gapiInited = false;
-    let gisInited = false;
-
     function log(msg) {
       const logEl = document.getElementById('log');
       logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
       logEl.scrollTop = logEl.scrollHeight;
     }
-
-    function gapiLoaded() {
-      log('Google API JS cargada.');
-      gapi.load('client', initializeGapiClient);
+    window.onload = function() {
+      log('La página cargó correctamente. Si ves esto, el HTML funciona.');
+      document.getElementById('authorize_button').style.display = '';
     }
-
-    async function initializeGapiClient() {
-      log('Inicializando GAPI Client...');
-      await gapi.client.init({
-        apiKey: API_KEY,
-        discoveryDocs: DISCOVERY_DOCS,
-      });
-      gapiInited = true;
-      maybeEnableButtons();
-    }
-
-    function gisLoaded() {
-      log('Google Identity Services cargada.');
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: (response) => {
-          if (response.error) {
-            log('Error en autenticación: ' + JSON.stringify(response));
-            return;
-          }
-          log('Usuario autenticado. Consultando correos...');
-          listMessages();
-        },
-      });
-      gisInited = true;
-      maybeEnableButtons();
-    }
-
-    function maybeEnableButtons() {
-      if (gapiInited && gisInited) {
-        document.getElementById('authorize_button').style.display = '';
-      }
-    }
-
-    document.getElementById('authorize_button').onclick = () => {
-      log('Solicitando token...');
-      tokenClient.requestAccessToken();
-    };
-
-    document.getElementById('signout_button').onclick = () => {
-      log('Desconectando usuario...');
-      const token = gapi.client.getToken();
-      if (token) {
-        google.accounts.oauth2.revoke(token.access_token, () => {
-          document.getElementById('signout_button').style.display = 'none';
-          document.getElementById('authorize_button').style.display = '';
-          log('Usuario desconectado.');
-          document.querySelector('#emails tbody').innerHTML = '';
-        });
-      }
-    };
-
-    async function listMessages() {
-      log('Consultando correos...');
-      try {
-        const res = await gapi.client.gmail.users.messages.list({
-          userId: 'me',
-          maxResults: 10,
-          labelIds: ['INBOX']
-        });
-        const messages = res.result.messages;
-        const tbody = document.querySelector('#emails tbody');
-        tbody.innerHTML = '';
-        if (!messages || messages.length === 0) {
-          log('No hay correos en la bandeja de entrada.');
-          tbody.innerHTML = '<tr><td colspan="3">No hay correos en la bandeja de entrada.</td></tr>';
-          return;
-        }
-        log(`Se encontraron ${messages.length} correos.`);
-        for (const message of messages) {
-          const msg = await gapi.client.gmail.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'metadata',
-            metadataHeaders: ['From', 'Subject', 'Date']
-          });
-          let headers = msg.result.payload.headers;
-          let from = headers.find(h => h.name === 'From')?.value || '';
-          let subject = headers.find(h => h.name === 'Subject')?.value || '';
-          let date = headers.find(h => h.name === 'Date')?.value || '';
-          let row = `<tr><td>${from}</td><td>${subject}</td><td>${date}</td></tr>`;
-          tbody.innerHTML += row;
-          log(`Correo: ${subject} (${from})`);
-        }
-        document.getElementById('signout_button').style.display = '';
-        document.getElementById('authorize_button').style.display = 'none';
-      } catch (error) {
-        log('Error al consultar correos: ' + JSON.stringify(error));
-      }
-    }
-
-    // Inicialización
-    window.onload = () => {
-      document.getElementById('authorize_button').style.display = 'none';
-      document.getElementById('signout_button').style.display = 'none';
-    }
-    window.addEventListener('DOMContentLoaded', gapiLoaded);
-    window.addEventListener('DOMContentLoaded', gisLoaded);
   </script>
 </body>
 </html>
