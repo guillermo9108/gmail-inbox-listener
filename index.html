@@ -3,9 +3,13 @@
 <head>
   <title>Gmail Inbox Listener</title>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"> <!-- Para móvil -->
   <style>
-    #log { background: #222; color: #eee; padding: 1em; height: 200px; overflow-y: auto; }
-    #authorize_button, #signout_button { margin: 10px; padding: 10px; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    #log { background: #222; color: #eee; padding: 1em; height: 200px; overflow-y: auto; font-size: 1em; }
+    table { width: 100%; border-collapse: collapse; font-size: 1em; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    button { padding: 10px; font-size: 1em; margin: 10px 0; width: 100%; }
   </style>
 </head>
 <body>
@@ -24,8 +28,7 @@
   <button id="signout_button" style="display:none;">Desconectar</button>
   <h2>Flujo y errores</h2>
   <pre id="log"></pre>
-
-  <!-- Google Identity Services y Gmail API scripts -->
+  <!-- Scripts Google -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="https://apis.google.com/js/api.js"></script>
   <script>
@@ -51,55 +54,72 @@
 
     async function initializeGapiClient() {
       log('Inicializando GAPI Client...');
-      await gapi.client.init({
-        apiKey: API_KEY,
-        discoveryDocs: DISCOVERY_DOCS,
-      });
-      gapiInited = true;
-      enableAuthorize();
+      try {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          discoveryDocs: DISCOVERY_DOCS,
+        });
+        gapiInited = true;
+        log('GAPI Client inicializado.');
+        enableAuthorize();
+      } catch (error) {
+        log('Error al inicializar GAPI Client: ' + JSON.stringify(error));
+      }
     }
 
     function gisLoaded() {
       log('Google Identity Services cargada.');
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: (response) => {
-          if (response.error) {
-            log('Error en autenticación: ' + JSON.stringify(response));
-            return;
-          }
-          log('Usuario autenticado. Consultando correos...');
-          listMessages();
-        },
-      });
-      gisInited = true;
-      enableAuthorize();
+      try {
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPES,
+          callback: (response) => {
+            if (response.error) {
+              log('Error en autenticación: ' + JSON.stringify(response));
+              return;
+            }
+            log('Usuario autenticado. Token obtenido.');
+            listMessages();
+          },
+        });
+        gisInited = true;
+        log('GIS Client inicializado.');
+        enableAuthorize();
+      } catch (error) {
+        log('Error al inicializar GIS Client: ' + JSON.stringify(error));
+      }
     }
 
     function enableAuthorize() {
-      // Solo muestra el botón si ambos sistemas están listos
       if (gapiInited && gisInited) {
-        document.getElementById('authorize_button').style.display = '';
+        document.getElementById('authorize_button').disabled = false;
         log('Botón "Conectar con Gmail" habilitado.');
       }
     }
 
     document.getElementById('authorize_button').onclick = () => {
       log('Solicitando token...');
-      tokenClient.requestAccessToken();
+      try {
+        tokenClient.requestAccessToken();
+      } catch (error) {
+        log('Error al solicitar token: ' + JSON.stringify(error));
+      }
     };
 
     document.getElementById('signout_button').onclick = () => {
       log('Desconectando usuario...');
-      const token = gapi.client.getToken();
-      if (token) {
-        google.accounts.oauth2.revoke(token.access_token, () => {
-          document.getElementById('signout_button').style.display = 'none';
-          document.getElementById('authorize_button').style.display = '';
-          log('Usuario desconectado.');
-          document.querySelector('#emails tbody').innerHTML = '';
-        });
+      try {
+        const token = gapi.client.getToken();
+        if (token) {
+          google.accounts.oauth2.revoke(token.access_token, () => {
+            document.getElementById('signout_button').style.display = 'none';
+            document.getElementById('authorize_button').style.display = '';
+            log('Usuario desconectado.');
+            document.querySelector('#emails tbody').innerHTML = '';
+          });
+        }
+      } catch (error) {
+        log('Error al desconectar: ' + JSON.stringify(error));
       }
     };
 
@@ -121,19 +141,23 @@
         }
         log(`Se encontraron ${messages.length} correos.`);
         for (const message of messages) {
-          const msg = await gapi.client.gmail.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'metadata',
-            metadataHeaders: ['From', 'Subject', 'Date']
-          });
-          let headers = msg.result.payload.headers;
-          let from = headers.find(h => h.name === 'From')?.value || '';
-          let subject = headers.find(h => h.name === 'Subject')?.value || '';
-          let date = headers.find(h => h.name === 'Date')?.value || '';
-          let row = `<tr><td>${from}</td><td>${subject}</td><td>${date}</td></tr>`;
-          tbody.innerHTML += row;
-          log(`Correo: ${subject} (${from})`);
+          try {
+            const msg = await gapi.client.gmail.users.messages.get({
+              userId: 'me',
+              id: message.id,
+              format: 'metadata',
+              metadataHeaders: ['From', 'Subject', 'Date']
+            });
+            let headers = msg.result.payload.headers;
+            let from = headers.find(h => h.name === 'From')?.value || '';
+            let subject = headers.find(h => h.name === 'Subject')?.value || '';
+            let date = headers.find(h => h.name === 'Date')?.value || '';
+            let row = `<tr><td>${from}</td><td>${subject}</td><td>${date}</td></tr>`;
+            tbody.innerHTML += row;
+            log(`Correo: ${subject} (${from})`);
+          } catch (error) {
+            log('Error al obtener correo: ' + JSON.stringify(error));
+          }
         }
         document.getElementById('signout_button').style.display = '';
         document.getElementById('authorize_button').style.display = 'none';
@@ -142,11 +166,15 @@
       }
     }
 
-    // Llama a las funciones de inicialización cuando los scripts externos cargan
+    // Inicialización segura para móvil
+    document.getElementById('authorize_button').disabled = true;
+    window.onload = function() {
+      log('La página cargó correctamente.');
+    }
+    // Scripts Google: usa onload para asegurar inicialización
     window.gapiLoaded = gapiLoaded;
     window.gisLoaded = gisLoaded;
   </script>
-  <!-- Usa los eventos onload para asegurar la inicialización -->
   <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
   <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
 </body>
