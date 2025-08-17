@@ -1,8 +1,7 @@
 <script src="https://apis.google.com/js/api.js"></script>
 <script>
-  // Reemplaza con tu Client ID
-  const CLIENT_ID = 'premiomoviletecsa@gmail.com';
-  const API_KEY = 'bdnqtrpevxwuhlcx';
+  const CLIENT_ID = '673848947640-mt8unrh2sbdcncee7nt2rsa7of2ul9e7.apps.googleusercontent.com';
+  const API_KEY = 'AIzaSyCMN2M55nYeAm2E-Qw4dOGByef4yOKN8t4';
 
   const DISCOVERY_DOCS = ["https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest"];
   const SCOPES = 'https://www.googleapis.com/auth/gmail.readonly';
@@ -18,9 +17,7 @@
       discoveryDocs: DISCOVERY_DOCS,
       scope: SCOPES
     }).then(function () {
-      // Listen for sign-in state changes.
       gapi.auth2.getAuthInstance().isSignedIn.listen(updateSigninStatus);
-      // Handle the initial sign-in state.
       updateSigninStatus(gapi.auth2.getAuthInstance().isSignedIn.get());
       document.getElementById('authorize_button').onclick = handleAuthClick;
       document.getElementById('signout_button').onclick = handleSignoutClick;
@@ -39,6 +36,7 @@
 
   function handleSignoutClick(event) {
     gapi.auth2.getAuthInstance().signOut();
+    document.querySelector('#emails tbody').innerHTML = '';
   }
 
   function listMessages() {
@@ -65,6 +63,9 @@
       });
     });
   }
+
+  // Llama a la función al cargar la página
+  window.onload = handleClientLoad;
 </script>
 <button id="authorize_button">Conectar con Gmail</button>
 <button id="signout_button">Desconectar</button>
