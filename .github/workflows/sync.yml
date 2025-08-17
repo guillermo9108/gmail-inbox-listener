@@ -1,0 +1,14 @@
+name: Email Sync Cron Job
+
+on:
+  schedule:
+    # Se ejecuta cada 15 minutos
+    - cron: '*/15 * * * *' 
+  workflow_dispatch:
+
+jobs:
+  run_sync_function:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Supabase Edge Function
+        run: curl -X POST -H "Authorization: Bearer ${{ secrets.SYNC_API_SECRET }}" ${{ secrets.SUPABASE_FUNCTION_URL }}
