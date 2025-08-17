@@ -52,7 +52,7 @@
         discoveryDocs: DISCOVERY_DOCS,
       });
       gapiInited = true;
-      maybeEnableButtons();
+      showAuthorizeButton();
     }
 
     function gisLoaded() {
@@ -70,12 +70,14 @@
         },
       });
       gisInited = true;
-      maybeEnableButtons();
+      showAuthorizeButton();
     }
 
-    function maybeEnableButtons() {
+    function showAuthorizeButton() {
+      // Mostrar el botón si ambos sistemas están listos
       if (gapiInited && gisInited) {
         document.getElementById('authorize_button').style.display = '';
+        log('Botón "Conectar con Gmail" habilitado.');
       }
     }
 
