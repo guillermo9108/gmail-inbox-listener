@@ -81,11 +81,9 @@ Deno.serve(async (req) => {
 
     console.log(`Encontrados ${uids.length} correos nuevos.`);
     
-    // Descarga los mensajes
-    const messages = await imapClient.fetch(uids, { envelope: true, body: true, source: true });
-
-    // Y luego los procesamos
-    for (const msg of messages) {
+    // Y ahora procesamos los correos uno por uno con un bucle 'for await'
+    const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
+    for await (const msg of messages) {
       console.log(`Procesando correo con UID: ${msg.uid}`);
       
       const emailText = new TextDecoder().decode(msg.body);
