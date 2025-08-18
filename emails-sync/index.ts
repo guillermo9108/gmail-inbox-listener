@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
         user: GMAIL_EMAIL,
         pass: GMAIL_APP_PASSWORD,
       },
-      logLevel: 'debug' // Esto nos ayudará a ver más detalles si algo falla
+      logLevel: 'debug'
     });
 
     await imapClient.connect();
