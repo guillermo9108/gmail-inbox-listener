@@ -43,6 +43,20 @@ Deno.serve(async (req) => {
 
   let imapClient;
   try {
+    // ---- NUEVO PASO: Leemos la última fecha de ejecución de la tabla ----
+    const { data: syncData, error: syncError } = await supabase
+      .from('sync_state')
+      .select('last_run')
+      .single();
+
+    if (syncError || !syncData) {
+      console.error('Error al leer el estado de sincronización:', syncError);
+      throw new Error('No se pudo obtener la última fecha de ejecución de la base de datos.');
+    }
+
+    const lastRunDate = new Date(syncData.last_run);
+    console.log(`Última ejecución registrada en Supabase: ${lastRunDate}`);
+
     imapClient = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
@@ -60,8 +74,8 @@ Deno.serve(async (req) => {
     // Abre la bandeja de entrada
     await imapClient.mailboxOpen('INBOX');
 
-    // Busca UIDs de correos no leídos y limita a 50
-    const uids = await imapClient.search('UNSEEN', { limit: 50 });
+    // ---- NUEVO PASO: Buscamos correos a partir de la última fecha registrada ----
+    const uids = await imapClient.search({ since: lastRunDate });
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
@@ -80,7 +94,8 @@ Deno.serve(async (req) => {
     console.log(`Encontrados ${uids.length} correos nuevos.`);
     
     const processedEmails = [];
-    
+    let lastProcessedTimestamp; // Variable para guardar la última fecha
+
     // Descarga los mensajes
     const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
     
@@ -104,13 +119,25 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // CAMBIO CLAVE: Aquí se marca el correo como visto para que no se procese de nuevo.
-      // No estamos eliminándolo.
+      // Marca el correo como visto para que no se procese de nuevo
       await imapClient.messageFlags(msg.uid, {
         add: 'SEEN'
       });
 
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
+      lastProcessedTimestamp = msg.envelope.date; // Guardamos la fecha del correo
+    }
+
+    // ---- NUEVO PASO: Actualizamos la fecha en la tabla con el último correo procesado ----
+    if (lastProcessedTimestamp) {
+        const { error: updateError } = await supabase
+            .from('sync_state')
+            .update({ last_run: lastProcessedTimestamp })
+            .eq('id', syncData.id); // Usamos el ID de la fila que leímos al inicio
+        
+        if (updateError) {
+            console.error('Error al actualizar la fecha de sincronización:', updateError);
+        }
     }
 
     console.log(`Procesados ${processedEmails.length} correos.`);
