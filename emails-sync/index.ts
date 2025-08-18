@@ -12,7 +12,11 @@ Deno.serve(async (req) => {
   const authHeader = req.headers.get('Authorization');
   const secretToken = Deno.env.get('SYNC_API_SECRET');
   if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== secretToken) {
-    return new Response(JSON.stringify({ error: 'Token de autenticación inválido.' }), { status: 401 });
+    return new Response(JSON.stringify({
+      error: 'Token de autenticación inválido.'
+    }), {
+      status: 401
+    });
   }
 
   // Validación de variables de entorno
@@ -24,7 +28,11 @@ Deno.serve(async (req) => {
   ];
   const missingVars = requiredEnvVars.filter(varName => !Deno.env.get(varName));
   if (missingVars.length > 0) {
-    return new Response(JSON.stringify({ error: `Faltan variables de entorno: ${missingVars.join(', ')}` }), { status: 500 });
+    return new Response(JSON.stringify({
+      error: `Faltan variables de entorno: ${missingVars.join(', ')}`
+    }), {
+      status: 500
+    });
   }
 
   const GMAIL_EMAIL = Deno.env.get('GMAIL_EMAIL');
@@ -49,46 +57,44 @@ Deno.serve(async (req) => {
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
 
-    const processedEmails = [];
-    
     // Abre la bandeja de entrada para procesar los correos
     await imapClient.mailboxOpen('INBOX');
 
-    const status = await imapClient.status('INBOX', { messages: true });
-    console.log(`Encontrados ${status.messages} correos nuevos en la bandeja.`);
+    const processedEmails = [];
     
-    const messagesToProcess = Math.min(status.messages, 50); // Límite de 50 correos
+    // Aquí es donde el código ha cambiado.
+    // Usamos 'fetch' para obtener el sobre (sender/subject) y el cuerpo del correo.
+    const messages = await imapClient.fetch('1:*', { envelope: true, body: true });
     
-    // Busca y procesa los correos
-    for (let i = 1; i <= messagesToProcess; i++) {
-      const fetch = await imapClient.fetch(i, { envelope: true, body: true });
+    for (const msg of messages) {
+      console.log(`Encontrado un correo: ${msg.envelope.subject}`);
       
-      const emailText = new TextDecoder().decode(fetch.body);
-      const senderMatch = emailText.match(/From: ([^\n]+)/i);
-      const subjectMatch = emailText.match(/Subject: ([^\n]+)/i);
-      const bodyMatch = emailText.split('\n\n').slice(1).join('\n\n').trim();
-
+      const emailText = new TextDecoder().decode(msg.body);
       const emailData = {
-        sender: senderMatch ? senderMatch[1].trim() : 'desconocido',
-        subject: subjectMatch ? subjectMatch[1].trim() : 'Sin asunto',
-        body: bodyMatch.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
+        sender: msg.envelope.from[0].address,
+        subject: msg.envelope.subject,
+        body: emailText.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
         source: 'imap_sync',
         status: 'new',
       };
-
+      
       const { error: insertError } = await supabase.from('emails_sync').insert(emailData);
-
+      
       if (insertError) {
         console.error(`Error insertando correo en Supabase: ${insertError.message}`);
         continue;
       }
-
-      await imapClient.messageDelete(i);
-      processedEmails.push({ subject: emailData.subject, index: i });
+      
+      // Ahora, eliminamos el mensaje usando su UID, que es más confiable que el índice.
+      await imapClient.messageDelete(msg.uid);
+      processedEmails.push({ subject: emailData.subject, index: msg.uid });
     }
 
-    console.log(`Procesados ${processedEmails.length} correos.`);
+    // Y, finalmente, usamos 'expunge' para purgar los correos eliminados del servidor.
+    await imapClient.expunge();
     
+    console.log(`Procesados ${processedEmails.length} correos.`);
+
     await imapClient.logout();
     return new Response(JSON.stringify({
       success: true,
