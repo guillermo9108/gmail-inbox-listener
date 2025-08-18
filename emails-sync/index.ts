@@ -104,7 +104,8 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Marca el correo como visto para que no se procese de nuevo
+      // CAMBIO CLAVE: Aquí se marca el correo como visto para que no se procese de nuevo.
+      // No estamos eliminándolo.
       await imapClient.messageFlags(msg.uid, {
         add: 'SEEN'
       });
