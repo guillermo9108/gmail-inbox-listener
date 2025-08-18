@@ -2,7 +2,7 @@ name: Email Sync Cron Job
 
 on:
   schedule:
-    - cron: '*/15 * * * *' # Ejecuta cada 15 minutos
+    - cron: '* * * * *' # Ejecuta cada 1 minuto
   workflow_dispatch:
   push:
     branches:
