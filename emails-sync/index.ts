@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 import { ImapFlow } from 'npm:imapflow';
-import { simpleParser } from 'npm:mailparser'; // <-- NUEVA LÍNEA
+import { simpleParser } from 'npm:mailparser';
 
 Deno.serve(async (req) => {
   // Validación de método
@@ -77,7 +77,6 @@ Deno.serve(async (req) => {
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
-        await imapClient.logout();
         return new Response(JSON.stringify({
             success: true,
             message: 'No hay correos nuevos para procesar.'
@@ -99,7 +98,6 @@ Deno.serve(async (req) => {
     for await (const msg of messages) {
       console.log(`Procesando correo con UID: ${msg.uid}`);
       
-      // ---- NUEVA LÓGICA: Usamos simpleParser para obtener el cuerpo del correo ----
       let emailText = '';
       if (msg.source) {
         const parsed = await simpleParser(msg.source);
@@ -121,10 +119,23 @@ Deno.serve(async (req) => {
         continue;
       }
       
+      // ---- INICIO DE LA NUEVA LÓGICA PARA BORRAR EL CORREO ----
+      try {
+        await imapClient.messageFlagsAdd(msg.uid, '\\Deleted');
+        console.log(`Correo con UID ${msg.uid} marcado para eliminación.`);
+      } catch (flagError) {
+        console.error(`Error al marcar el correo con UID ${msg.uid} para eliminación: ${flagError.message}`);
+      }
+      // ---- FIN DE LA NUEVA LÓGICA ----
+      
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date;
     }
 
+    // ---- EJECUCIÓN FINAL PARA ELIMINAR LOS CORREOS MARCADOS ----
+    console.log('Limpiando la bandeja de entrada (expunge)...');
+    await imapClient.expunge();
+    
     if (lastProcessedTimestamp) {
         const { error: updateError } = await supabase
             .from('sync_state')
@@ -138,10 +149,9 @@ Deno.serve(async (req) => {
 
     console.log(`Procesados ${processedEmails.length} correos.`);
 
-    await imapClient.logout();
     return new Response(JSON.stringify({
       success: true,
-      message: `Procesados ${processedEmails.length} correos de IMAP.`,
+      message: `Procesados y eliminados ${processedEmails.length} correos de IMAP.`,
       details: processedEmails
     }), {
       status: 200,
@@ -161,5 +171,11 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json'
       }
     });
+  } finally {
+    // Aseguramos que la conexión IMAP siempre se cierre
+    if (imapClient && imapClient.isConnected) {
+        await imapClient.logout();
+        console.log('Conexión IMAP cerrada.');
+    }
   }
 });
