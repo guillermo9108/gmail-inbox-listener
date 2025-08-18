@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main  # O la rama en la que trabajes (p. ej., master)
+      - main
 
 jobs:
   run_sync_function:
