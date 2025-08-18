@@ -5,7 +5,7 @@ on:
     - cron: '*/15 * * * *'
  workflow_dispatch:
  push:
-    branches:
+   branches:
       - main
 
 jobs:
