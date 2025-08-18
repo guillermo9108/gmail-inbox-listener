@@ -9,7 +9,7 @@ on:
      - main
 jobs:
   run_sync_function:
-   runs-on: ubuntu-latest
-   steps:
+  runs-on: ubuntu-latest
+  steps:
       - name: Deploy and Trigger Supabase Edge Function
        run: curl -X POST -H "Authorization: Bearer ${{ secrets.SYNC_API_SECRET }}" ${{ secrets.SUPABASE_FUNCTION_URL }}
