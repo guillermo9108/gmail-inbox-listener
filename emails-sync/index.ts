@@ -59,14 +59,34 @@ Deno.serve(async (req) => {
 
     const processedEmails = [];
     
-    // Abre la bandeja de entrada para procesar los correos
+    // Abre la bandeja de entrada
     await imapClient.mailboxOpen('INBOX');
 
-    const messages = imapClient.fetch('1:*', { envelope: true, body: true });
+    // Busca UIDs de correos no leídos y limita a 50
+    const uids = await imapClient.search('UNSEEN', { limit: 50 });
     
-    // Usamos 'for await' para un manejo correcto de la librería
-    for await (const msg of messages) {
-      console.log(`Encontrado un correo: ${msg.envelope.subject}`);
+    if (uids.length === 0) {
+        console.log('No hay correos nuevos para procesar.');
+        await imapClient.logout();
+        return new Response(JSON.stringify({
+            success: true,
+            message: 'No hay correos nuevos para procesar.'
+        }), {
+            status: 200,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+    }
+
+    console.log(`Encontrados ${uids.length} correos nuevos.`);
+    
+    // Descarga los mensajes
+    const messages = await imapClient.fetch(uids, { envelope: true, body: true, source: true });
+
+    // Y luego los procesamos
+    for (const msg of messages) {
+      console.log(`Procesando correo con UID: ${msg.uid}`);
       
       const emailText = new TextDecoder().decode(msg.body);
       const emailData = {
@@ -84,12 +104,16 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Eliminamos el mensaje usando su UID, que es más confiable que el índice.
+      // Marca el correo como visto
+      await imapClient.messageFlags(msg.uid, {
+        add: 'SEEN'
+      });
+
+      // Elimina el mensaje después de ser procesado
       await imapClient.messageDelete(msg.uid);
-      processedEmails.push({ subject: emailData.subject, index: msg.uid });
+      processedEmails.push({ subject: emailData.subject, uid: msg.uid });
     }
 
-    // Usamos 'expunge' para purgar los correos eliminados del servidor.
     await imapClient.expunge();
     
     console.log(`Procesados ${processedEmails.length} correos.`);
