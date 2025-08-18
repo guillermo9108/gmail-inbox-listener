@@ -43,10 +43,10 @@ Deno.serve(async (req) => {
 
   let imapClient;
   try {
-    // ---- NUEVO PASO: Leemos la última fecha de ejecución de la tabla ----
+    // ---- PASO 1: Leemos la última fecha de ejecución de la tabla ----
     const { data: syncData, error: syncError } = await supabase
       .from('sync_state')
-      .select('last_run')
+      .select('last_run, id')
       .single();
 
     if (syncError || !syncData) {
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     // Abre la bandeja de entrada
     await imapClient.mailboxOpen('INBOX');
 
-    // ---- NUEVO PASO: Buscamos correos a partir de la última fecha registrada ----
+    // ---- PASO 2: Buscamos correos a partir de la última fecha registrada ----
     const uids = await imapClient.search({ since: lastRunDate });
     
     if (uids.length === 0) {
@@ -119,16 +119,11 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Marca el correo como visto para que no se procese de nuevo
-      await imapClient.messageFlags(msg.uid, {
-        add: 'SEEN'
-      });
-
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date; // Guardamos la fecha del correo
     }
 
-    // ---- NUEVO PASO: Actualizamos la fecha en la tabla con el último correo procesado ----
+    // ---- PASO 3: Actualizamos la fecha en la tabla con el último correo procesado ----
     if (lastProcessedTimestamp) {
         const { error: updateError } = await supabase
             .from('sync_state')
