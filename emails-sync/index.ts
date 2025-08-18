@@ -1,5 +1,41 @@
+import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { ImapFlow } from 'npm:imapflow';
+
+Deno.serve(async (req) => {
+  // Validación de método
+  if (req.method !== 'POST') {
+    return new Response('Método no permitido', {
+      status: 405
+    });
+  }
+  // Validación de secreto
+  const authHeader = req.headers.get('Authorization');
+  const secretToken = Deno.env.get('SYNC_API_SECRET');
+  if (!authHeader || !authHeader.startsWith('Bearer ') || authHeader.split(' ')[1] !== secretToken) {
+    return new Response(JSON.stringify({ error: 'Token de autenticación inválido.' }), { status: 401 });
+  }
+
+  // Validación de variables de entorno
+  const requiredEnvVars = [
+    'GMAIL_EMAIL',
+    'GMAIL_APP_PASSWORD',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY'
+  ];
+  const missingVars = requiredEnvVars.filter(varName => !Deno.env.get(varName));
+  if (missingVars.length > 0) {
+    return new Response(JSON.stringify({ error: `Faltan variables de entorno: ${missingVars.join(', ')}` }), { status: 500 });
+  }
+
+  const GMAIL_EMAIL = Deno.env.get('GMAIL_EMAIL');
+  const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD');
+  const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  let imapClient;
   try {
-    const imapClient = new ImapFlow({
+    imapClient = new ImapFlow({
       host: 'imap.gmail.com',
       port: 993,
       secure: true,
@@ -7,54 +43,19 @@
         user: GMAIL_EMAIL,
         pass: GMAIL_APP_PASSWORD,
       },
+      logLevel: 'debug' // Esto nos ayudará a ver más detalles si algo falla
     });
 
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
     
-    // Obtiene el lock de la bandeja de entrada
-    let lock = await imapClient.getLock('INBOX');
-
-    try {
-        const status = await imapClient.status('INBOX', { messages: true });
-        console.log(`Encontrados ${status.messages} correos nuevos en la bandeja.`);
-        
-        const processedEmails = [];
-        // Busca correos no leídos
-        const messages = imapClient.fetch('1:*', { envelope: true });
-        
-        for await (const msg of messages) {
-          console.log(`Encontrado un correo: ${msg.envelope.subject}`);
-          
-          const sender = msg.envelope.from[0].address;
-          const subject = msg.envelope.subject;
-          
-          const emailData = {
-            sender: sender,
-            subject: subject,
-            body: '', // Se podría añadir el cuerpo con otro comando
-            source: 'imap_sync',
-            status: 'new',
-          };
-          
-          const { error: insertError } = await supabase.from('emails_sync').insert(emailData);
-
-          if (insertError) {
-            console.error(`Error insertando correo en Supabase: ${insertError.message}`);
-            continue; // Salta al siguiente correo en caso de error
-          }
-          
-          processedEmails.push({ subject: emailData.subject });
-        }
-    } finally {
-        lock.release(); // Libera el lock
-    }
+    // Aquí puedes agregar la lógica para procesar correos.
+    // Por ahora, solo nos aseguraremos de que la conexión funcione.
     
     await imapClient.logout();
     return new Response(JSON.stringify({
       success: true,
-      message: `Procesados ${processedEmails.length} correos de IMAP.`,
-      details: processedEmails
+      message: 'Conexión IMAP probada exitosamente. ¡Listo para procesar correos!',
     }), {
       status: 200,
       headers: {
@@ -74,3 +75,4 @@
       }
     });
   }
+});
