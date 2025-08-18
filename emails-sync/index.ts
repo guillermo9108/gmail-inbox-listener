@@ -57,16 +57,15 @@ Deno.serve(async (req) => {
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
 
+    const processedEmails = [];
+    
     // Abre la bandeja de entrada para procesar los correos
     await imapClient.mailboxOpen('INBOX');
 
-    const processedEmails = [];
+    const messages = imapClient.fetch('1:*', { envelope: true, body: true });
     
-    // Aquí es donde el código ha cambiado.
-    // Usamos 'fetch' para obtener el sobre (sender/subject) y el cuerpo del correo.
-    const messages = await imapClient.fetch('1:*', { envelope: true, body: true });
-    
-    for (const msg of messages) {
+    // Usamos 'for await' para un manejo correcto de la librería
+    for await (const msg of messages) {
       console.log(`Encontrado un correo: ${msg.envelope.subject}`);
       
       const emailText = new TextDecoder().decode(msg.body);
@@ -85,12 +84,12 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // Ahora, eliminamos el mensaje usando su UID, que es más confiable que el índice.
+      // Eliminamos el mensaje usando su UID, que es más confiable que el índice.
       await imapClient.messageDelete(msg.uid);
       processedEmails.push({ subject: emailData.subject, index: msg.uid });
     }
 
-    // Y, finalmente, usamos 'expunge' para purgar los correos eliminados del servidor.
+    // Usamos 'expunge' para purgar los correos eliminados del servidor.
     await imapClient.expunge();
     
     console.log(`Procesados ${processedEmails.length} correos.`);
