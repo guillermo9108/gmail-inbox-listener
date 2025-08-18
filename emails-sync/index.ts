@@ -56,64 +56,58 @@ Deno.serve(async (req) => {
 
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
-
-    const processedEmails = [];
     
-    // Abre la bandeja de entrada
-    await imapClient.mailboxOpen('INBOX');
-
-    // Busca UIDs de correos no leídos y limita a 50
-    const uids = await imapClient.search('UNSEEN', { limit: 50 });
-    
-    if (uids.length === 0) {
-        console.log('No hay correos nuevos para procesar.');
-        await imapClient.logout();
-        return new Response(JSON.stringify({
-            success: true,
-            message: 'No hay correos nuevos para procesar.'
-        }), {
-            status: 200,
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-    }
-
-    console.log(`Encontrados ${uids.length} correos nuevos.`);
-    
-    // Y ahora procesamos los correos uno por uno con un bucle 'for await'
-    const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
-    for await (const msg of messages) {
-      console.log(`Procesando correo con UID: ${msg.uid}`);
+    // Usamos `locked()` para una operación segura
+    const processedEmails = await imapClient.locked('INBOX', async () => {
+      // Busca UIDs de correos no leídos y limita a 50
+      const uids = await imapClient.search('UNSEEN', { limit: 50 });
       
-      const emailText = new TextDecoder().decode(msg.body);
-      const emailData = {
-        sender: msg.envelope.from[0].address,
-        subject: msg.envelope.subject,
-        body: emailText.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
-        source: 'imap_sync',
-        status: 'new',
-      };
-      
-      const { error: insertError } = await supabase.from('emails_sync').insert(emailData);
-      
-      if (insertError) {
-        console.error(`Error insertando correo en Supabase: ${insertError.message}`);
-        continue;
+      if (uids.length === 0) {
+          console.log('No hay correos nuevos para procesar.');
+          return [];
       }
+  
+      console.log(`Encontrados ${uids.length} correos nuevos.`);
       
-      // Marca el correo como visto
-      await imapClient.messageFlags(msg.uid, {
-        add: 'SEEN'
-      });
+      const emailList = [];
+      
+      // Descarga los mensajes
+      const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
+      
+      // Y luego los procesamos
+      for await (const msg of messages) {
+        console.log(`Procesando correo con UID: ${msg.uid}`);
+        
+        const emailText = new TextDecoder().decode(msg.body);
+        const emailData = {
+          sender: msg.envelope.from[0].address,
+          subject: msg.envelope.subject,
+          body: emailText.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
+          source: 'imap_sync',
+          status: 'new',
+        };
+        
+        const { error: insertError } = await supabase.from('emails_sync').insert(emailData);
+        
+        if (insertError) {
+          console.error(`Error insertando correo en Supabase: ${insertError.message}`);
+          continue;
+        }
+        
+        // Marca el correo como visto
+        await imapClient.messageFlags(msg.uid, {
+          add: 'SEEN'
+        });
+  
+        // Elimina el mensaje después de ser procesado
+        await imapClient.messageDelete(msg.uid);
+        emailList.push({ subject: emailData.subject, uid: msg.uid });
+      }
+  
+      await imapClient.expunge();
+      return emailList;
+    });
 
-      // Elimina el mensaje después de ser procesado
-      await imapClient.messageDelete(msg.uid);
-      processedEmails.push({ subject: emailData.subject, uid: msg.uid });
-    }
-
-    await imapClient.expunge();
-    
     console.log(`Procesados ${processedEmails.length} correos.`);
 
     await imapClient.logout();
