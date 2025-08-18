@@ -119,22 +119,18 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // ---- INICIO DE LA NUEVA LÓGICA PARA BORRAR EL CORREO ----
+      // ---- INICIO DE LA NUEVA LÓGICA PARA MOVER EL CORREO A LA PAPELERA ----
       try {
-        await imapClient.messageFlagsAdd(msg.uid, '\\Deleted');
-        console.log(`Correo con UID ${msg.uid} marcado para eliminación.`);
-      } catch (flagError) {
-        console.error(`Error al marcar el correo con UID ${msg.uid} para eliminación: ${flagError.message}`);
+        await imapClient.messageMove(msg.uid, '[Gmail]/Trash');
+        console.log(`Correo con UID ${msg.uid} movido a la papelera.`);
+      } catch (moveError) {
+        console.error(`Error al mover el correo con UID ${msg.uid}: ${moveError.message}`);
       }
       // ---- FIN DE LA NUEVA LÓGICA ----
       
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date;
     }
-
-    // ---- EJECUCIÓN FINAL PARA ELIMINAR LOS CORREOS MARCADOS ----
-    console.log('Limpiando la bandeja de entrada (expunge)...');
-    await imapClient.expunge();
     
     if (lastProcessedTimestamp) {
         const { error: updateError } = await supabase
@@ -151,7 +147,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message: `Procesados y eliminados ${processedEmails.length} correos de IMAP.`,
+      message: `Procesados y movidos ${processedEmails.length} correos de IMAP.`,
       details: processedEmails
     }), {
       status: 200,
@@ -172,7 +168,6 @@ Deno.serve(async (req) => {
       }
     });
   } finally {
-    // Aseguramos que la conexión IMAP siempre se cierre
     if (imapClient && imapClient.isConnected) {
         await imapClient.logout();
         console.log('Conexión IMAP cerrada.');
