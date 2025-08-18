@@ -49,13 +49,56 @@ Deno.serve(async (req) => {
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
     
-    // Aquí puedes agregar la lógica para procesar correos.
-    // Por ahora, solo nos aseguraremos de que la conexión funcione.
+    // Obtiene el lock de la bandeja de entrada
+    let lock = await imapClient.getLock('INBOX');
+
+    try {
+      const status = await imapClient.status('INBOX', { messages: true });
+      console.log(`Encontrados ${status.messages} correos nuevos en la bandeja.`);
+      
+      const processedEmails = [];
+      const messagesToProcess = Math.min(status.messages, 50); // Límite de 50 correos
+      
+      // Busca y procesa los correos del 1 hasta el número de mensajes
+      for (let i = 1; i <= messagesToProcess; i++) {
+        const fetch = await imapClient.fetch(i, { envelope: true, body: true });
+        
+        const emailText = new TextDecoder().decode(fetch.body);
+        const senderMatch = emailText.match(/From: ([^\n]+)/i);
+        const subjectMatch = emailText.match(/Subject: ([^\n]+)/i);
+        const bodyMatch = emailText.split('\n\n').slice(1).join('\n\n').trim();
+
+        const emailData = {
+          sender: senderMatch ? senderMatch[1].trim() : 'desconocido',
+          subject: subjectMatch ? subjectMatch[1].trim() : 'Sin asunto',
+          body: bodyMatch.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
+          source: 'imap_sync',
+          status: 'new',
+        };
+
+        const { error: insertError } = await supabase.from('emails_sync').insert(emailData);
+
+        if (insertError) {
+          console.error(`Error insertando correo en Supabase: ${insertError.message}`);
+          continue; // Salta al siguiente correo en caso de error
+        }
+
+        // Elimina el correo una vez procesado
+        await imapClient.messageDelete(i);
+        processedEmails.push({ subject: emailData.subject, index: i });
+      }
+
+      console.log(`Procesados ${processedEmails.length} correos.`);
+
+    } finally {
+      lock.release();
+    }
     
     await imapClient.logout();
     return new Response(JSON.stringify({
       success: true,
-      message: 'Conexión IMAP probada exitosamente. ¡Listo para procesar correos!',
+      message: `Procesados ${processedEmails.length} correos de IMAP.`,
+      details: processedEmails
     }), {
       status: 200,
       headers: {
