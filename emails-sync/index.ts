@@ -43,7 +43,6 @@ Deno.serve(async (req) => {
 
   let imapClient;
   try {
-    // ---- PASO 1: Leemos la última fecha de ejecución de la tabla ----
     const { data: syncData, error: syncError } = await supabase
       .from('sync_state')
       .select('last_run, id')
@@ -71,10 +70,8 @@ Deno.serve(async (req) => {
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
     
-    // Abre la bandeja de entrada
     await imapClient.mailboxOpen('INBOX');
 
-    // ---- PASO 2: Buscamos correos a partir de la última fecha registrada ----
     const uids = await imapClient.search({ since: lastRunDate });
     
     if (uids.length === 0) {
@@ -94,20 +91,21 @@ Deno.serve(async (req) => {
     console.log(`Encontrados ${uids.length} correos nuevos.`);
     
     const processedEmails = [];
-    let lastProcessedTimestamp; // Variable para guardar la última fecha
+    let lastProcessedTimestamp;
 
-    // Descarga los mensajes
     const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
     
-    // Y luego los procesamos
     for await (const msg of messages) {
       console.log(`Procesando correo con UID: ${msg.uid}`);
+      
+      // ---- AQUÍ ESTÁ LA NUEVA LÍNEA PARA DEPURACIÓN ----
+      console.log('Cuerpo del mensaje (raw):', msg.body);
       
       const emailText = new TextDecoder().decode(msg.body);
       const emailData = {
         sender: msg.envelope.from[0].address,
         subject: msg.envelope.subject,
-        body: emailText.substring(0, 5000), // Limita el cuerpo a 5000 caracteres
+        body: emailText.substring(0, 5000),
         source: 'imap_sync',
         status: 'new',
       };
@@ -120,15 +118,14 @@ Deno.serve(async (req) => {
       }
       
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
-      lastProcessedTimestamp = msg.envelope.date; // Guardamos la fecha del correo
+      lastProcessedTimestamp = msg.envelope.date;
     }
 
-    // ---- PASO 3: Actualizamos la fecha en la tabla con el último correo procesado ----
     if (lastProcessedTimestamp) {
         const { error: updateError } = await supabase
             .from('sync_state')
             .update({ last_run: lastProcessedTimestamp })
-            .eq('id', syncData.id); // Usamos el ID de la fila que leímos al inicio
+            .eq('id', syncData.id);
         
         if (updateError) {
             console.error('Error al actualizar la fecha de sincronización:', updateError);
