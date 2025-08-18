@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 import { ImapFlow } from 'npm:imapflow';
+import { simpleParser } from 'npm:mailparser'; // <-- NUEVA LÍNEA
 
 Deno.serve(async (req) => {
   // Validación de método
@@ -98,10 +99,13 @@ Deno.serve(async (req) => {
     for await (const msg of messages) {
       console.log(`Procesando correo con UID: ${msg.uid}`);
       
-      // ---- AQUÍ ESTÁ LA NUEVA LÍNEA PARA DEPURACIÓN ----
-      console.log('Cuerpo del mensaje (raw):', msg.body);
+      // ---- NUEVA LÓGICA: Usamos simpleParser para obtener el cuerpo del correo ----
+      let emailText = '';
+      if (msg.source) {
+        const parsed = await simpleParser(msg.source);
+        emailText = parsed.text || parsed.html || '';
+      }
       
-      const emailText = new TextDecoder().decode(msg.body);
       const emailData = {
         sender: msg.envelope.from[0].address,
         subject: msg.envelope.subject,
