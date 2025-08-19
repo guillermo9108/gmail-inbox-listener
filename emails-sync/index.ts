@@ -71,6 +71,11 @@ Deno.serve(async (req) => {
     await imapClient.connect();
     console.log('Conexión IMAP establecida exitosamente');
     
+    // ---- NUEVA LÓGICA: Listar todas las carpetas IMAP disponibles ----
+    const mailboxes = await imapClient.list();
+    console.log('Carpetas IMAP disponibles:', mailboxes);
+    // ---- FIN DE LA NUEVA LÓGICA ----
+    
     await imapClient.mailboxOpen('INBOX');
 
     const uids = await imapClient.search({ since: lastRunDate });
@@ -123,7 +128,7 @@ Deno.serve(async (req) => {
       lastProcessedTimestamp = msg.envelope.date;
     }
     
-    // ---- NUEVA LÓGICA: Mover todos los correos en un solo comando ----
+    // Mover todos los correos en un solo comando
     try {
         await imapClient.messageMove(uids, '[Gmail]/Trash');
         console.log(`Movidos ${uids.length} correos a la papelera en un solo comando.`);
