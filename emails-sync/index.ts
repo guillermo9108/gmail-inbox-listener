@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { createClient } from 'npm:@supabase/supabase-js@2.24.0';
 import { ImapFlow } from 'npm:imapflow';
 import { simpleParser } from 'npm:mailparser';
 
@@ -121,6 +121,14 @@ Deno.serve(async (req) => {
       
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date;
+    }
+
+    // Código agregado: Mover los correos a la carpeta "Procesados"
+    try {
+        await imapClient.messageMove(uids, 'Procesados');
+        console.log(`Movidos ${uids.length} correos a la carpeta "Procesados" en un solo comando.`);
+    } catch (moveError) {
+        console.error(`Error al mover los correos: ${moveError.message}`);
     }
     
     if (lastProcessedTimestamp) {
