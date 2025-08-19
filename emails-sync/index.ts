@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
 import { ImapFlow } from 'npm:imapflow';
-import { simpleParser } from 'npm:mailparser';
+import { simpleParser } from 'npm:mailparser'; // <-- NUEVA LÍNEA
 
 Deno.serve(async (req) => {
   // Validación de método
@@ -77,6 +77,7 @@ Deno.serve(async (req) => {
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
+        await imapClient.logout();
         return new Response(JSON.stringify({
             success: true,
             message: 'No hay correos nuevos para procesar.'
@@ -119,19 +120,19 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // ---- INICIO DE LA NUEVA LÓGICA PARA MOVER EL CORREO A LA PAPELERA ----
+      // ---- INICIO DE LA LÓGICA PARA MOVER EL CORREO A LA PAPELERA ----
       try {
         await imapClient.messageMove(msg.uid, '[Gmail]/Trash');
         console.log(`Correo con UID ${msg.uid} movido a la papelera.`);
       } catch (moveError) {
         console.error(`Error al mover el correo con UID ${msg.uid}: ${moveError.message}`);
       }
-      // ---- FIN DE LA NUEVA LÓGICA ----
+      // ---- FIN DE LA LÓGICA ----
       
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date;
     }
-    
+
     if (lastProcessedTimestamp) {
         const { error: updateError } = await supabase
             .from('sync_state')
@@ -145,6 +146,7 @@ Deno.serve(async (req) => {
 
     console.log(`Procesados ${processedEmails.length} correos.`);
 
+    await imapClient.logout();
     return new Response(JSON.stringify({
       success: true,
       message: `Procesados y movidos ${processedEmails.length} correos de IMAP.`,
