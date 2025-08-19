@@ -44,8 +44,6 @@ Deno.serve(async (req) => {
 
   let imapClient;
   try {
-    // Ya no necesitamos la fecha de sincronización de Supabase
-    // para la búsqueda, pero la mantenemos para actualizarla si es necesario
     const { data: syncData, error: syncError } = await supabase
       .from('sync_state')
       .select('last_run, id')
@@ -75,7 +73,8 @@ Deno.serve(async (req) => {
     
     await imapClient.mailboxOpen('INBOX');
 
-    // ---- CAMBIO DE LA LÍNEA DE BÚSQUEDA ----
+    // ---- LÍNEA DE REGISTRO ----
+    console.log('Buscando correos no leídos...');
     const uids = await imapClient.search({ unseen: true });
     
     if (uids.length === 0) {
@@ -96,6 +95,8 @@ Deno.serve(async (req) => {
     const processedEmails = [];
     let lastProcessedTimestamp;
 
+    // ---- LÍNEA DE REGISTRO ----
+    console.log('Comenzando a descargar los correos...');
     const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
     
     for await (const msg of messages) {
@@ -122,7 +123,6 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // ---- NUEVA LÍNEA: Marcar el correo como leído ----
       try {
         await imapClient.messageFlagsAdd(msg.uid, '\\Seen');
         console.log(`Correo con UID ${msg.uid} marcado como leído.`);
@@ -134,7 +134,8 @@ Deno.serve(async (req) => {
       lastProcessedTimestamp = msg.envelope.date;
     }
     
-    // Mover todos los correos en un solo comando
+    // ---- LÍNEA DE REGISTRO ----
+    console.log('Finalizado el procesamiento de correos. Moviendo a la papelera...');
     try {
         await imapClient.messageMove(uids, '[Gmail]/Papelera');
         console.log(`Movidos ${uids.length} correos a la papelera en un solo comando.`);
