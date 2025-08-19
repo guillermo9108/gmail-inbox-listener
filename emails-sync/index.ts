@@ -44,6 +44,8 @@ Deno.serve(async (req) => {
 
   let imapClient;
   try {
+    // Ya no necesitamos la fecha de sincronización de Supabase
+    // para la búsqueda, pero la mantenemos para actualizarla si es necesario
     const { data: syncData, error: syncError } = await supabase
       .from('sync_state')
       .select('last_run, id')
@@ -73,7 +75,8 @@ Deno.serve(async (req) => {
     
     await imapClient.mailboxOpen('INBOX');
 
-    const uids = await imapClient.search({ since: lastRunDate });
+    // ---- CAMBIO DE LA LÍNEA DE BÚSQUEDA ----
+    const uids = await imapClient.search({ unseen: true });
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
@@ -117,6 +120,14 @@ Deno.serve(async (req) => {
       if (insertError) {
         console.error(`Error insertando correo en Supabase: ${insertError.message}`);
         continue;
+      }
+      
+      // ---- NUEVA LÍNEA: Marcar el correo como leído ----
+      try {
+        await imapClient.messageFlagsAdd(msg.uid, '\\Seen');
+        console.log(`Correo con UID ${msg.uid} marcado como leído.`);
+      } catch (flagError) {
+        console.error(`Error al marcar el correo con UID ${msg.uid} como leído: ${flagError.message}`);
       }
       
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
