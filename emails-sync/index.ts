@@ -73,9 +73,8 @@ Deno.serve(async (req) => {
     
     await imapClient.mailboxOpen('INBOX');
 
-    // ---- LÍNEA DE REGISTRO ----
-    console.log('Buscando correos no leídos...');
-    const uids = await imapClient.search({ unseen: true });
+    // ---- SOLUCIÓN FINAL: Búsqueda más confiable y con límite ----
+    const uids = await imapClient.search({ unseen: true, since: lastRunDate, limit: 10 });
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
@@ -95,8 +94,6 @@ Deno.serve(async (req) => {
     const processedEmails = [];
     let lastProcessedTimestamp;
 
-    // ---- LÍNEA DE REGISTRO ----
-    console.log('Comenzando a descargar los correos...');
     const messages = imapClient.fetch(uids, { envelope: true, body: true, source: true });
     
     for await (const msg of messages) {
@@ -123,6 +120,7 @@ Deno.serve(async (req) => {
         continue;
       }
       
+      // ---- Marcar el correo como leído ----
       try {
         await imapClient.messageFlagsAdd(msg.uid, '\\Seen');
         console.log(`Correo con UID ${msg.uid} marcado como leído.`);
@@ -134,8 +132,7 @@ Deno.serve(async (req) => {
       lastProcessedTimestamp = msg.envelope.date;
     }
     
-    // ---- LÍNEA DE REGISTRO ----
-    console.log('Finalizado el procesamiento de correos. Moviendo a la papelera...');
+    // ---- Mover a la papelera (nombre corregido) ----
     try {
         await imapClient.messageMove(uids, '[Gmail]/Papelera');
         console.log(`Movidos ${uids.length} correos a la papelera en un solo comando.`);
