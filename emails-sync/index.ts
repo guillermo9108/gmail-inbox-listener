@@ -73,8 +73,7 @@ Deno.serve(async (req) => {
     
     await imapClient.mailboxOpen('INBOX');
 
-    // ---- SOLUCIÓN FINAL: Búsqueda más confiable y con límite ----
-    const uids = await imapClient.search({ unseen: true, since: lastRunDate, limit: 10 });
+    const uids = await imapClient.search({ since: lastRunDate });
     
     if (uids.length === 0) {
         console.log('No hay correos nuevos para procesar.');
@@ -120,24 +119,8 @@ Deno.serve(async (req) => {
         continue;
       }
       
-      // ---- Marcar el correo como leído ----
-      try {
-        await imapClient.messageFlagsAdd(msg.uid, '\\Seen');
-        console.log(`Correo con UID ${msg.uid} marcado como leído.`);
-      } catch (flagError) {
-        console.error(`Error al marcar el correo con UID ${msg.uid} como leído: ${flagError.message}`);
-      }
-      
       processedEmails.push({ subject: emailData.subject, uid: msg.uid });
       lastProcessedTimestamp = msg.envelope.date;
-    }
-    
-    // ---- Mover a la papelera (nombre corregido) ----
-    try {
-        await imapClient.messageMove(uids, '[Gmail]/Papelera');
-        console.log(`Movidos ${uids.length} correos a la papelera en un solo comando.`);
-    } catch (moveError) {
-        console.error(`Error al mover los correos: ${moveError.message}`);
     }
     
     if (lastProcessedTimestamp) {
